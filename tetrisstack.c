@@ -1,14 +1,13 @@
 /**
- * Simulação da Fila de Peças Futuras do jogo Tetris Stack.
+ * Simulação do Gerenciamento de Peças do jogo Tetris Stack.
+ * Nível Intermediário: Fila + Pilha.
  *
- * Este programa implementa uma fila circular em C para gerenciar as peças
- * (Struct Peca) que aguardam para entrar no jogo.
+ * Este programa implementa:
+ * 1. Uma Fila Circular: para as peças futuras (sempre cheia).
+ * 2. Uma Pilha Linear: para as peças reservadas (capacidade limitada).
  *
- * Funcionalidades:
- * 1. Inicializa a fila com um número fixo de peças.
- * 2. Permite ao usuário "Jogar" uma peça (dequeue).
- * 3. Permite ao usuário "Inserir" uma nova peça (enqueue), se houver espaço.
- * 4. Exibe o estado da fila após cada operação.
+ * O jogador pode "Jogar" (dequeue da fila), "Reservar" (dequeue da
+ * fila e push para a pilha) ou "Usar" (pop da pilha).
  */
 
 #include <stdio.h>
@@ -17,18 +16,17 @@
 
 // --- Definições Globais e Estruturas ---
 
-// Define o tamanho máximo da fila de peças futuras
+// Define os tamanhos máximos das estruturas
 #define TAM_FILA 5
+#define TAM_PILHA 3
 
 /**
  * @brief Contador global para garantir que cada peça tenha um ID único.
- * Inicia em 0.
  */
 int proximoId = 0;
 
 /**
  * @brief Estrutura que representa uma peça do jogo.
- * Contém um 'nome' (tipo) e um 'id' único.
  */
 typedef struct {
     char nome; // Tipo da peça (I, O, T, L)
@@ -36,16 +34,22 @@ typedef struct {
 } Peca;
 
 /**
- * @brief Estrutura da Fila Circular.
- * Armazena as peças em um array e controla o fluxo usando
- * índices de 'frente', 'tras' e um contador de 'quantidade'.
+ * @brief Estrutura da Fila Circular (FIFO - First-In, First-Out).
  */
 typedef struct {
-    Peca pecas[TAM_FILA]; // Array fixo para armazenar as peças
-    int frente;          // Índice do primeiro elemento (para remoção)
-    int tras;            // Índice da próxima posição livre (para inserção)
-    int quantidade;      // Número atual de elementos na fila
+    Peca pecas[TAM_FILA];
+    int frente;     // Índice do primeiro elemento (para remoção)
+    int tras;       // Índice da próxima posição livre (para inserção)
+    int quantidade; // Número atual de elementos
 } Fila;
+
+/**
+ * @brief Estrutura da Pilha Linear (LIFO - Last-In, First-Out).
+ */
+typedef struct {
+    Peca pecas[TAM_PILHA];
+    int topo; // Índice do elemento no topo (-1 se vazia)
+} Pilha;
 
 // --- Protótipos das Funções (Assinaturas) ---
 
@@ -55,10 +59,19 @@ int filaEstaVazia(Fila *f);
 int filaEstaCheia(Fila *f);
 int enqueue(Fila *f, Peca p);
 int dequeue(Fila *f, Peca *pRemovida);
+void exibirFila(Fila *f);
+
+// Funções de Gerenciamento da Pilha
+void inicializarPilha(Pilha *p);
+int pilhaEstaVazia(Pilha *p);
+int pilhaEstaCheia(Pilha *p);
+int push(Pilha *p, Peca peca);
+int pop(Pilha *p, Peca *pRemovida);
+void exibirPilha(Pilha *p);
 
 // Funções Auxiliares e de Interface
 Peca gerarPeca();
-void exibirFila(Fila *f);
+void exibirEstadoAtual(Fila *f, Pilha *p);
 void exibirMenu();
 void limparBufferEntrada();
 
@@ -69,57 +82,78 @@ int main() {
     srand(time(NULL));
 
     Fila filaDePecas;
-    inicializarFila(&filaDePecas);
+    Pilha pilhaDeReserva;
 
-    // Requisito: Inicializar a fila com um número fixo de elementos (5)
-    printf("Inicializando a fila com %d peças...\n", TAM_FILA);
+    // Prepara as estruturas
+    inicializarFila(&filaDePecas);
+    inicializarPilha(&pilhaDeReserva);
+
+    // Requisito: Inicializar a fila com um número fixo de elementos
+    printf("Inicializando o jogo...\n");
     for (int i = 0; i < TAM_FILA; i++) {
-        // Gera e insere (enqueue) as peças iniciais
         enqueue(&filaDePecas, gerarPeca());
     }
 
     int opcao;
     do {
         // 1. Exibir o estado atual
-        printf("\n-------------------------------------\n");
-        printf("Confira a seguir seu estado:\n\n");
-        exibirFila(&filaDePecas);
+        exibirEstadoAtual(&filaDePecas, &pilhaDeReserva);
 
         // 2. Exibir o menu
         exibirMenu();
 
         // 3. Ler a ação do usuário
-        printf("Escolha sua ação: ");
+        printf("Opção: ");
         scanf("%d", &opcao);
-        limparBufferEntrada(); // Evita loops infinitos se o usuário digitar letras
+        limparBufferEntrada(); // Garante limpeza do buffer de entrada
+
+        Peca pecaTemp; // Peça temporária para operações
 
         // 4. Processar a ação
         switch (opcao) {
-            case 1: { // Jogar peça (dequeue)
-                Peca pecaJogada;
-                // Tenta remover a peça da frente
-                if (dequeue(&filaDePecas, &pecaJogada)) {
-                    printf("\n-> Ação: Peça jogada: [%c %d]\n", pecaJogada.nome, pecaJogada.id);
+            case 1: // Jogar peça
+                if (dequeue(&filaDePecas, &pecaTemp)) {
+                    printf("\n-> Ação: Peça jogada: [%c %d]\n", pecaTemp.nome, pecaTemp.id);
+                    
+                    // Requisito: Adiciona nova peça para manter a fila cheia
+                    enqueue(&filaDePecas, gerarPeca());
                 } else {
-                    printf("\n-> Ação: Fila está vazia! Nenhuma peça para jogar.\n");
+                    // Isso não deve acontecer se a lógica de refil estiver correta
+                    printf("\n-> Ação: Fila de peças vazia!\n");
                 }
                 break;
-            }
-            case 2: { // Inserir nova peça (enqueue)
-                // Verifica se a fila não está cheia
-                if (filaEstaCheia(&filaDePecas)) {
-                    printf("\n-> Ação: Fila está cheia! Jogue uma peça antes de adicionar.\n");
+
+            case 2: // Reservar peça
+                if (pilhaEstaCheia(&pilhaDeReserva)) {
+                    printf("\n-> Ação: Pilha de reserva está cheia! Use uma peça antes.\n");
                 } else {
-                    // Gera e insere a nova peça
-                    Peca novaPeca = gerarPeca();
-                    enqueue(&filaDePecas, novaPeca);
-                    printf("\n-> Ação: Nova peça inserida: [%c %d]\n", novaPeca.nome, novaPeca.id);
+                    // 1. Tira da fila
+                    if (dequeue(&filaDePecas, &pecaTemp)) {
+                        // 2. Coloca na pilha
+                        push(&pilhaDeReserva, pecaTemp);
+                        printf("\n-> Ação: Peça [%c %d] movida para a reserva.\n", pecaTemp.nome, pecaTemp.id);
+                        
+                        // 3. Requisito: Adiciona nova peça na fila
+                        enqueue(&filaDePecas, gerarPeca());
+                    } else {
+                        printf("\n-> Ação: Fila de peças vazia!\n");
+                    }
                 }
                 break;
-            }
+
+            case 3: // Usar peça reservada
+                if (pop(&pilhaDeReserva, &pecaTemp)) {
+                    printf("\n-> Ação: Peça [%c %d] usada da reserva.\n", pecaTemp.nome, pecaTemp.id);
+                    // Nota: A fila NÃO é reabastecida aqui, pois a peça não veio dela.
+                } else {
+                    printf("\n-> Ação: Pilha de reserva vazia!\n");
+                }
+                break;
+
             case 0: // Sair
                 printf("\nSaindo do Tetris Stack...\n");
                 break;
+
             default:
                 printf("\nOpção inválida! Tente novamente.\n");
                 break;
@@ -127,150 +161,176 @@ int main() {
 
     } while (opcao != 0);
 
-    return 0; // Indica que o programa terminou com sucesso
+    return 0;
 }
 
 // --- Implementação das Funções ---
 
-/**
- * @brief Inicializa a fila, zerando os indicadores.
- * @param f Ponteiro para a fila a ser inicializada.
- */
+// --- Funções da Fila (FIFO) ---
+
 void inicializarFila(Fila *f) {
     f->frente = 0;
     f->tras = 0;
     f->quantidade = 0;
 }
 
-/**
- * @brief Verifica se a fila está vazia.
- * @param f Ponteiro para a fila.
- * @return 1 (true) se a quantidade for 0, 0 (false) caso contrário.
- */
 int filaEstaVazia(Fila *f) {
     return (f->quantidade == 0);
 }
 
-/**
- * @brief Verifica se a fila está cheia.
- * @param f Ponteiro para a fila.
- * @return 1 (true) se a quantidade for igual ao tamanho máximo, 0 (false) caso contrário.
- */
 int filaEstaCheia(Fila *f) {
     return (f->quantidade == TAM_FILA);
 }
 
+int enqueue(Fila *f, Peca p) {
+    if (filaEstaCheia(f)) return 0; // Falha
+    f->pecas[f->tras] = p;
+    f->tras = (f->tras + 1) % TAM_FILA; // Lógica circular
+    f->quantidade++;
+    return 1; // Sucesso
+}
+
+int dequeue(Fila *f, Peca *pRemovida) {
+    if (filaEstaVazia(f)) return 0; // Falha
+    *pRemovida = f->pecas[f->frente];
+    f->frente = (f->frente + 1) % TAM_FILA; // Lógica circular
+    f->quantidade--;
+    return 1; // Sucesso
+}
+
+void exibirFila(Fila *f) {
+    printf("Fila de peças:\t");
+    if (filaEstaVazia(f)) {
+        printf("[ VAZIA ]\n");
+        return;
+    }
+
+    // Itera da 'frente' até a 'tras' de forma circular
+    int i = f->frente;
+    for (int count = 0; count < f->quantidade; count++) {
+        Peca p = f->pecas[i];
+        printf("[%c %d] ", p.nome, p.id);
+        i = (i + 1) % TAM_FILA;
+    }
+    printf("\n");
+}
+
+// --- Funções da Pilha (LIFO) ---
+
+/**
+ * @brief Inicializa a pilha, definindo o topo como -1 (vazia).
+ */
+void inicializarPilha(Pilha *p) {
+    p->topo = -1; // -1 indica que a pilha está vazia
+}
+
+/**
+ * @brief Verifica se a pilha está vazia.
+ */
+int pilhaEstaVazia(Pilha *p) {
+    return (p->topo == -1);
+}
+
+/**
+ * @brief Verifica se a pilha está cheia.
+ */
+int pilhaEstaCheia(Pilha *p) {
+    // O topo é um índice (base 0), então o máximo é TAM_PILHA - 1
+    return (p->topo == TAM_PILHA - 1);
+}
+
+/**
+ * @brief Adiciona um item ao topo da pilha (Push).
+ * @return 1 se sucesso, 0 se a pilha estava cheia.
+ */
+int push(Pilha *p, Peca peca) {
+    if (pilhaEstaCheia(p)) {
+        return 0; // Falha
+    }
+    // 1. Incrementa o topo
+    p->topo++;
+    // 2. Adiciona o item na nova posição do topo
+    p->pecas[p->topo] = peca;
+    return 1; // Sucesso
+}
+
+/**
+ * @brief Remove um item do topo da pilha (Pop).
+ * @param pRemovida Ponteiro de saída para a peça removida.
+ * @return 1 se sucesso, 0 se a pilha estava vazia.
+ */
+int pop(Pilha *p, Peca *pRemovida) {
+    if (pilhaEstaVazia(p)) {
+        return 0; // Falha
+    }
+    // 1. Obtém o item do topo
+    *pRemovida = p->pecas[p->topo];
+    // 2. Decrementa o topo
+    p->topo--;
+    return 1; // Sucesso
+}
+
+/**
+ * @brief Exibe o estado da pilha, do topo para a base.
+ */
+void exibirPilha(Pilha *p) {
+    printf("Pilha de reserva\t(Topo -> Base): ");
+    if (pilhaEstaVazia(p)) {
+        printf("[ VAZIA ]\n");
+        return;
+    }
+
+    // Itera do topo (último a entrar) para a base (índice 0)
+    for (int i = p->topo; i >= 0; i--) {
+        Peca peca = p->pecas[i];
+        printf("[%c %d] ", peca.nome, peca.id);
+    }
+    printf("\n");
+}
+
+// --- Funções Auxiliares ---
+
 /**
  * @brief Gera uma nova peça aleatória com um ID único.
- * Sorteia um dos 4 tipos de peça ('I', 'O', 'T', 'L') e
- * atribui o próximo ID sequencial.
- * @return A nova Peca gerada.
  */
 Peca gerarPeca() {
-    char tipos[] = {'I', 'O', 'T', 'L'}; // Tipos de peças disponíveis
-    int indiceTipo = rand() % 4;         // Sorteia um índice de 0 a 3
+    char tipos[] = {'I', 'O', 'T', 'L'};
+    int indiceTipo = rand() % 4; // Sorteia um índice de 0 a 3
 
     Peca novaPeca;
-    novaPeca.nome = tipos[indiceTipo]; // Define o tipo
-    novaPeca.id = proximoId;           // Atribui o ID único global
-
-    proximoId++; // Incrementa o contador de ID para a próxima peça
+    novaPeca.nome = tipos[indiceTipo];
+    novaPeca.id = proximoId; // Atribui o ID único global
+    proximoId++;           // Incrementa o contador para a próxima
 
     return novaPeca;
 }
 
 /**
- * @brief Adiciona uma peça ao final da fila (enqueue).
- * A inserção ocorre na posição 'tras'. O índice 'tras' é
- * então atualizado de forma circular.
- * @param f Ponteiro para a fila.
- * @param p Peca a ser adicionada.
- * @return 1 (true) se sucesso, 0 (false) se a fila estava cheia.
+ * @brief Exibe o estado consolidado (Fila e Pilha).
  */
-int enqueue(Fila *f, Peca p) {
-    if (filaEstaCheia(f)) {
-        return 0; // Falha, fila cheia
-    }
-
-    // 1. Adiciona a peça na posição 'tras' (próxima posição livre)
-    f->pecas[f->tras] = p;
-
-    // 2. Atualiza o índice 'tras' de forma circular
-    // (Ex: se TAM_FILA=5 e tras=4, (4+1)%5 = 0 -> volta ao início)
-    f->tras = (f->tras + 1) % TAM_FILA;
-
-    // 3. Incrementa a quantidade de elementos
-    f->quantidade++;
-
-    return 1; // Sucesso
-}
-
-/**
- * @brief Remove uma peça do início da fila (dequeue).
- * A remoção ocorre da posição 'frente'. O índice 'frente' é
- * então atualizado de forma circular.
- * @param f Ponteiro para a fila.
- * @param pRemovida Ponteiro (saída) para onde a peça removida será armazenada.
- * @return 1 (true) se sucesso, 0 (false) se a fila estava vazia.
- */
-int dequeue(Fila *f, Peca *pRemovida) {
-    if (filaEstaVazia(f)) {
-        return 0; // Falha, fila vazia
-    }
-
-    // 1. Obtém a peça da 'frente' (posição do primeiro elemento)
-    *pRemovida = f->pecas[f->frente];
-
-    // 2. Atualiza o índice 'frente' de forma circular
-    f->frente = (f->frente + 1) % TAM_FILA;
-
-    // 3. Decrementa a quantidade de elementos
-    f->quantidade--;
-
-    return 1; // Sucesso
-}
-
-/**
- * @brief Exibe o estado atual da fila no console, da frente para trás.
- * @param f Ponteiro para a fila.
- */
-void exibirFila(Fila *f) {
-    if (filaEstaVazia(f)) {
-        printf("Fila de peças: [ VAZIA ]\n");
-        return;
-    }
-
-    printf("Fila de peças: ");
-
-    // Para exibir na ordem correta, começamos em 'frente'
-    // e iteramos 'quantidade' vezes
-    int i = f->frente;
-    for (int count = 0; count < f->quantidade; count++) {
-        
-        Peca p = f->pecas[i];
-        printf("[%c %d] ", p.nome, p.id);
-
-        // Move o índice 'i' circularmente para o próximo elemento
-        i = (i + 1) % TAM_FILA;
-    }
-    printf("\n");
+void exibirEstadoAtual(Fila *f, Pilha *p) {
+    printf("\n-------------------------------------------------\n");
+    printf("Estado atual:\n\n");
+    exibirFila(f);
+    exibirPilha(p);
+    printf("-------------------------------------------------\n");
 }
 
 /**
  * @brief Exibe o menu de ações para o jogador.
  */
 void exibirMenu() {
-    printf("\nOpções de ação:\n");
+    printf("\nOpções de Ação:\n");
     printf("Código  Ação\n");
-    printf("  1     Jogar peça (dequeue)\n");
-    printf("  2     Inserir nova peça (enqueue)\n");
+    printf("  1     Jogar peça (da Fila)\n");
+    printf("  2     Reservar peça (Fila -> Pilha)\n");
+    printf("  3     Usar peça reservada (da Pilha)\n");
     printf("  0     Sair\n");
 }
 
 /**
- * @brief Limpa o buffer de entrada (stdin).
- * Essencial após um scanf() para evitar que um '\n' ou caracteres
- * inválidos causem loops infinitos.
+ * @brief Limpa o buffer de entrada (stdin) para evitar
+ * leituras incorretas em loops (especialmente após scanf).
  */
 void limparBufferEntrada() {
     int c;
